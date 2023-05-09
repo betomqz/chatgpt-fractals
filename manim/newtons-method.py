@@ -1,4 +1,5 @@
 from manim import *
+import numpy as np
 
 
 class NewtonsMethod(Scene):
@@ -107,4 +108,66 @@ class NewtonsMethod(Scene):
 
         self.play(x0.animate.set_color(GREEN),
                   x0_label.animate.set_color(GREEN))
+        self.wait(2)
+
+
+class NewtonsMethodNPoints(Scene):
+    def construct(self):
+        # set up graph
+        ax = Axes(
+            x_range=[-0.4, 16],
+            y_range=[-6, 8],
+            axis_config={"include_tip": True}
+        )
+        labels = ax.get_axis_labels(x_label="x", y_label="f(x)")
+
+        def func(x):
+            return 0.03*(x-1)*(x-10)*(x-13)
+
+        def func_prime(x):
+            return 0.09*x**2 - 1.44*x + 4.59
+
+        graph = ax.plot(func, x_range=[-0.4, 16], color=BLUE)
+        x_vals = np.linspace(0, 16, 80)
+        # See line 2870 in https://github.com/3b1b/videos/blob/master/_2021/newton_fractal.py
+        guess_dots = VGroup(*(
+            Dot(
+                ax.coords_to_point(x, 0),
+                # radius=self.dot_radius,
+                # fill_opacity=self.dot_opacity,
+                color=YELLOW
+            )
+            for x in x_vals
+        ))
+
+        def get_new_x(dot):
+            x0 = ax.p2c(dot.get_center())[0]
+            x1 = x0 - func(x0) / func_prime(x0)
+            return x1
+
+        def get_color(dot):
+            x = ax.p2c(dot.get_center())[0]
+            d1 = abs(x - 1)
+            d2 = abs(x - 10)
+            d3 = abs(x - 13)
+            if min([d1, d2, d3]) == d1:
+                return RED
+            if min([d1, d2, d3]) == d2:
+                return GREEN
+            return PURPLE
+
+        self.play(Create(ax), Create(labels), Create(graph))
+        self.wait(1)
+        self.play(Create(guess_dots))
+        self.wait(2)
+        for _ in range(6):
+            self.play(AnimationGroup(
+                *[dot.animate.move_to(ax.c2p(get_new_x(dot), 0)) for dot in guess_dots]))
+            self.wait(0.5)
+
+        self.play(AnimationGroup(
+            *[dot.animate.set_color(get_color(dot)) for dot in guess_dots]))
+        self.wait(2)
+        self.play(AnimationGroup(
+            *[dot.animate.move_to(ax.c2p(x_vals[i], 0)) for i, dot in enumerate(guess_dots)]))
         self.wait(2)
