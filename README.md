@@ -139,13 +139,151 @@ int main() {
 El código funciona muy bien. La siguiente imagen es el resultado si compilamos y ejecutamos el código:
 ![](/imgs/fig1.bmp)
 
-# 4. Una librería dinámica en C
+# 4. El Método de Newton en C
 
-Quiero que ChatGPT programe una librería dinámica para trabajar con las funciones de la forma $f: \mathbb{C} \to \mathbb{C}$. Me parece que podemos separar esto porque, para que la implementación que haremos del método de Newton funcione, necesitamos poder evaluar la función, conocer su derivada y también sus raíces. Aunque el método como tal puede trabajar con una familia grande de funciones, aquí nos limitaremos a trabajar con polinomios mónicos —polinomios cuyo coeficiente principal es siempre 1— porque así podemos decidir de antemano las raíces de la función y con eso obtener un polinomio mónico único, así como su derivada, sin tener que rompernos tanto la cabeza; además, esto nos da suficiente espacio para experimentar y jugar con diferentes fractales. Seguro no nos vamos a aburrir, pero por si en algún futuro queremos trabajar con una familia de funciones más amplia, podemos modificar la librería dinámica y ya.
+## 4.1 Trabajando con polinomios mónicos en C
 
-# 5. El Método de Newton en C
+El objetivo de esta sección es conseguir dos funciones escritas en C: `eval()` y `derivative()`. Queremos que estas funciones reciban un número y, dado un polinomio, nos regresen la evaluación del polinomio en ese punto y su derivada. Dicho de otro modo, si tenemos a un polinomio $p:\mathbb{C} \to \mathbb{C}$ y a $z\in \mathbb{C}$, entonces las funciones nos permitirán obtener $p(z)$ y $p'(z)$. Las funciones nos servirán para obtener la siguiente iteración del método de Newton.
 
-# 6. Nuestro primer fractal
+Aunque el método como tal puede trabajar con una familia grande de funciones, aquí nos limitaremos a trabajar con polinomios **mónicos** —polinomios cuyo coeficiente principal es siempre 1— porque así podemos decidir de antemano las raíces de la función y con eso obtener un polinomio mónico único, así como su derivada, sin tener que rompernos tanto la cabeza; además, esto nos da suficiente espacio para experimentar y jugar con diferentes fractales.
+
+Para programar esta parte, necesitamos ser un poco más específicos con ChatGPT. Primero le pedí que generara el código para programar la función `derivative()` suponiendo que recibe como parámetros un número complejo y una estructura de C que contiene dos elementos: el número de raíces del polinomio y un arreglo con dichas raíces. Aquí el resultado:
+
+```c
+struct Polynomial {
+    int n; // number of roots
+    double complex roots[100]; // array of roots
+};
+
+double complex polynomial_derivative(double complex z, struct Polynomial p) {
+    double complex result = 0.0;
+    for (int i = 0; i < p.n; i++) {
+        double complex term = 1.0;
+        for (int j = 0; j < p.n; j++) {
+            if (i != j) {
+                term *= (z - p.roots[j]);
+            }
+        }
+        result += term;
+    }
+    return result;
+}
+```
+
+No está tan mal. Si nos fijamos, veremos que ChatGPT supo por sí solo que tenía que usar la regla de la cadena para derivar el polinomio. Además tuvo cuidado de que, al ir acumulando la suma, se empiece en cero, pero para ir acumulando la multiplicación empieza en uno. Buen detalle. Sin embargo, sí hay unas cuantas cosas que decidí cambiar manualmente, pero son detalles que no le especifiqué a ChatGPT. Prefiero que la estructura para las raíces se llame `Roots` en vez de `Polynomial`, pues probablemente pueda servir para más funciones, no solamente polinomios. Además, me gustaría que el arreglo fuera de tamaño variable; no necesariamente de 100 raíces. Aquí el resultado de los cambios en la estructura:
+
+```c
+struct Roots {
+    int n;                  // number of roots
+    double complex* roots;  // array of roots
+};
+```
+
+Tampoco especifiqué el nombre de la función, entonces se lo cambié a simplemente `derivative()`. Además, prefiero que la función reciba un **apuntador** a la estructura y no la estructura como tal. La razón de esto es porque estaremos llamando a esta función muchísimas veces, y si no usamos apuntadores, cada vez que la mandemos llamar, C tendrá que copiar la estructura completa. En este caso en particular, es mejor trabajar con la dirección en la que la estructura está almacenada. Y ya que estamos en eso, también recibiremos la dirección de memoria del punto en el que vamos a evaluar la función, en lugar de una copia del valor. Así queda la función una vez que hacemos estos cambios:
+
+```c
+double complex derivative(double complex* z, struct Roots* p) {
+    double complex result = 0.0;
+    for (int i = 0; i < p->n; i++) {
+        double complex term = 1.0;
+        for (int j = 0; j < p->n; j++) {
+            if (i != j) {
+                term *= (*z - p->roots[j]);
+            }
+        }
+        result += term;
+    }
+    return result;
+}
+```
+
+Ahora necesitamos la función `eval()`, que podemos construir nosotros mismos a partir de la anterior, aunque también le pedí a ChatGPT que la hiciera. Le cambié algunas cosas para que fuera consistente con la función anterior y aquí está el resultado:
+
+```c
+double complex eval(double complex* z, struct Roots* p) {
+    double complex result = 1.0;
+    for (int i = 0; i < p->n; i++) {
+        result *= (*z - p->roots[i]);
+    }
+    return result;
+}
+```
+
+## 4.2 El método de Newton ahora sí
+
+Teniendo estas dos funciones, toca pedirle a ChatGPT que implemente el método de Newton. El resultado fue bastante bueno; solamente le cambié cosas como los nombres a las variables y a la estructura:
+
+```c
+double complex newtons_method(double complex x0, struct Roots* p, double eps) {
+    double complex x = x0;
+    double complex fx, fxprime;
+    int iter = 0;
+    do {
+        fx = eval(&x, p);
+        fxprime = derivative(&x, p);
+        if (fxprime == 0.0) {
+            printf("Error: derivative is zero.\n");
+            exit(1);
+        }
+        x = x - fx / fxprime;
+        iter++;
+    } while (cabs(fx) > eps && iter < 1000);
+    if (iter == 1000) {
+        printf("Error: maximum iterations exceeded.\n");
+        exit(1);
+    }
+    return x;
+}
+```
+
+La función recibe un punto de partida, las raíces del polinomio y un número decimal que funciona como "tolerancia"; aplica el método de Newton mientras el polinomio evaluado en el punto sea más grande que la tolerancia (mientras esté "lejos" de cero) y el número de iteraciones sea menor que 1000. Notemos además que hace algo de control de errores: verifica que la derivada en el punto no sea cero (pues no se puede dividir entre cero) y si llega al número máximo de iteraciones, da un aviso.
+
+Podemos hacer una prueba de todo esto usando un polinomio muy parecido al de la animación presentada al principio:
+
+```c
+int main() {
+    struct Roots* p = malloc(sizeof(struct Roots));
+    p->n = 3;
+    p->roots = malloc(p->n * sizeof(double complex));
+    p->roots[0] = 1;
+    p->roots[1] = 10;
+    p->roots[2] = 13;
+
+    double complex z = 5.2;
+    double complex der = derivative(&z, p);
+    double complex value = eval(&z, p);
+
+    printf("f(%f + %fi) = %f + %fi\n", creal(z), cimag(z), creal(value), cimag(value));
+    printf("f'(%f + %fi) = %f + %fi\n", creal(z), cimag(z), creal(der), cimag(der));
+
+    double eps = 1e-6;
+    double complex root = newtons_method(z, p, eps);
+    printf("Root: %f + %fi\n", creal(root), cimag(root));
+
+    free(p->roots);
+    free(p);
+
+    return 0;
+}
+```
+
+Este código parte de un polinomio con tres raíces reales: $1, 10$ y $13$, aunque también podríamos verlas como tres raíces complejas: $1+0i, 10+0i$ y $13+0i$. Además, el punto de partida es $z = 5.2 + 0i$. Tanto el punto de partida como las raíces son los mismos de la animación, con el pequeño detalle de que ahora estamos trabajando con un polinomio mónico y en la animación no. Si compilamos y ejecutamos el código anterior, tenemos el siguiente resultado:
+
+```
+f(5.200000 + 0.000000i) = 157.248000 + -0.000000i
+f'(5.200000 + 0.000000i) = -15.480000 + 0.000000i
+Root: 13.000000 + 0.000000i
+```
+
+¡Converge a la misma raíz! Vamos bien.
+
+# 5. Nuestro primer fractal
+
+# 6. Una librería dinámica en C
+
+Quiero que ChatGPT programe una librería dinámica para trabajar con las funciones de la forma $f: \mathbb{C} \to \mathbb{C}$. Me parece que podemos separar esto porque, para que la implementación que haremos del método de Newton funcione, necesitamos poder evaluar la función, conocer su derivada y también sus raíces.
+
+Seguro no nos vamos a aburrir, pero por si en algún futuro queremos trabajar con una familia de funciones más amplia, podemos modificar la librería dinámica y ya.
 
 # 7. Concurrencia
 

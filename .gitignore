@@ -56,3 +56,6 @@ __pycache__/
 media/images/
 Tex/
 partial_movie_files/
+
+# Temporary folder
+tempo/
