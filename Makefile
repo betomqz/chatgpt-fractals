@@ -1,4 +1,4 @@
-SOURCES.c = polynomials.c
+SOURCES.c = ente.c
 
 OBJECTS = poly
 
